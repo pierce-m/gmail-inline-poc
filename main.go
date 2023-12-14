@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"time"
@@ -41,6 +42,20 @@ func (s *Session) Rcpt(to string, opts *gosmtp.RcptOptions) error {
 	return nil
 }
 
+func doSend(e *email.Email, retries int) error {
+	if retries > 4 {
+		return errors.New("too many retries")
+	}
+
+	err := e.Send("smtp-relay.gmail.com:587", nil)
+	if err != nil {
+		log.Fatal("error sending email, retrying", err)
+		return doSend(e, retries+1)
+	}
+
+	return nil
+}
+
 func (s *Session) Data(r io.Reader) error {
 	e, err := email.NewEmailFromReader(r)
 	if err != nil {
@@ -48,14 +63,12 @@ func (s *Session) Data(r io.Reader) error {
 		return err
 	}
 
+	eB, _ := e.Bytes()
+	fmt.Println(string(eB))
+	e.HTML = []byte(string(e.HTML) + "\n\nCheck out this added line!!\n\n")
 	e.Headers.Add("X-NIGHTFALL-SCANNED", "")
-	err = e.Send("smtp-relay.gmail.com:587", nil)
-	if err != nil {
-		log.Fatal("error sending email", err)
-		return err
-	}
 
-	return nil
+	return doSend(e, 0)
 }
 
 func (s *Session) Reset() {}
